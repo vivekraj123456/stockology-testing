@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Background -->
+  <rect width="64" height="64" fill="#8B1A1A" rx="8"/>
+  
+  <!-- House Icon -->
+  <path d="M32 16 L48 28 L48 48 L16 48 L16 28 Z" fill="white" stroke="none"/>
+  <rect x="26" y="32" width="5" height="8" fill="#8B1A1A"/>
+  <rect x="33" y="32" width="5" height="8" fill="#8B1A1A"/>
+  
+  <!-- Stock chart lines (upward trend) -->
+  <polyline points="18,44 24,36 30,40 36,28" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Text indicator -->
+  <text x="32" y="58" font-size="8" font-weight="bold" fill="white" text-anchor="middle">TRADE</text>
+</svg>

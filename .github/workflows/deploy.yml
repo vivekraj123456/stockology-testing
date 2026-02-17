@@ -1,0 +1,43 @@
+name: Deploy to Production Server
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          echo "🚀 Starting deployment..."
+          cd /var/www/html
+          
+          echo "📥 Pulling latest code..."
+          git pull origin main
+          
+          echo "📦 Installing dependencies..."
+          npm install --legacy-peer-deps
+          
+          echo "🏗️ Building application..."
+          npm run build
+          
+          echo "🔄 Restarting application..."
+          pm2 restart stockology-nextjs
+          
+          echo "✅ Deployment completed successfully!"
