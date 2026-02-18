@@ -1,4 +1,7 @@
-const serviceLinks = [{ name: "Mobile & online trading platform", path: "/App" }];
+const serviceLinks = [
+  { name: "Mobile & online trading platform", path: "/App" },
+  { name: "Calculator", path: "/Calculator" },
+];
 
 const quickLinks = [
   { name: "Fund Transfer", path: "/Fund-Transfer" },

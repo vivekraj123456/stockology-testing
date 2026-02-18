@@ -133,7 +133,10 @@ const Footer = () => {
                     <ul className="space-y-2.5 text-base text-slate-600">
                       {section.links.map((item) => (
                         <li key={item.name}>
-                          <Link href={item.path} className="transition hover:text-slate-900">
+                          <Link
+                            href={item.path}
+                            className="inline-flex transition-all duration-200 hover:translate-x-0.5 hover:text-emerald-600 hover:drop-shadow-[0_0_10px_rgba(16,185,129,0.35)]"
+                          >
                             {item.name}
                           </Link>
                         </li>

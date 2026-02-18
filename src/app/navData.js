@@ -21,19 +21,19 @@ export const navData = [
     id: "services",
     label: "Services",
     href: "/Service",
-    type: "link",
-    //   subItems: [
-    //     {
-    //       id: "sub1",
-    //       label: "Services1",
-    //       href: "/Services1",
-    //     },
-    //     {
-    //       id: "sub2",
-    //       label: "Services2",
-    //       href: "/Services2",
-    //     },
-    //   ],
+    type: "dropdown",
+    subItems: [
+      {
+        id: "services-home",
+        label: "All Services",
+        href: "/Service",
+      },
+      {
+        id: "services-calculator",
+        label: "Calculator",
+        href: "/Calculator",
+      },
+    ],
   },
   {
     id: 5,
