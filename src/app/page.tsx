@@ -35,8 +35,8 @@ export default function Home() {
       {/* Live Stock Market Dashboard */}
       <section id="live-market-data" className="py-16 px-4 md:px-8 lg:px-16 max-w-7xl mx-auto">
         <div className="mb-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Live Market Data</h2>
-          <p className="text-gray-600">Real-time stock prices, charts, and market insights</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Market Data</h2>
+          <p className="text-gray-600">The Data are delayed by some seconds, to view real time data visit our App.</p>
         </div>
         <Suspense fallback={<div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">Loading market dashboard...</div>}>
           <StockDashboard />

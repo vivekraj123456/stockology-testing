@@ -144,9 +144,9 @@ const Navbar = () => {
 
     const cacheKey = `NSE:${query.toUpperCase()}`;
     const cachedEntry = stockSearchCacheRef.current.get(cacheKey);
-    if (cachedEntry && Date.now() - cachedEntry.timestamp < SEARCH_CACHE_TTL_MS) {
+    if (cachedEntry && cachedEntry.results.length > 0 && Date.now() - cachedEntry.timestamp < SEARCH_CACHE_TTL_MS) {
       setStockSearchResults(cachedEntry.results);
-      setStockSearchError(cachedEntry.results.length > 0 ? null : "No stocks found for this search.");
+      setStockSearchError(null);
       setStockSearching(false);
       return;
     }
@@ -172,10 +172,14 @@ const Navbar = () => {
 
           setStockSearchResults(dedupedByBase);
           setStockSearchError(dedupedByBase.length > 0 ? null : "No stocks found for this search.");
-          stockSearchCacheRef.current.set(cacheKey, {
-            results: dedupedByBase,
-            timestamp: Date.now(),
-          });
+          if (dedupedByBase.length > 0) {
+            stockSearchCacheRef.current.set(cacheKey, {
+              results: dedupedByBase,
+              timestamp: Date.now(),
+            });
+          } else {
+            stockSearchCacheRef.current.delete(cacheKey);
+          }
           return;
         }
 

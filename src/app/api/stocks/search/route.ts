@@ -148,10 +148,31 @@ function getCachedResults(query: string, exchange: "NSE" | "BSE"): SearchResultS
 
 function setCachedResults(query: string, exchange: "NSE" | "BSE", results: SearchResultStock[]): void {
   const key = getCacheKey(query, exchange);
+  if (results.length === 0) {
+    searchCache.delete(key);
+    return;
+  }
+
   searchCache.set(key, {
     results,
     timestamp: Date.now(),
   });
+}
+
+function mapCandidateToSearchResult(
+  candidate: { symbol: string; name: string },
+  exchange: "NSE" | "BSE"
+): SearchResultStock {
+  const yahooSymbol = mapSymbolToExchange(candidate.symbol, exchange);
+  return {
+    symbol: toDisplaySymbol(yahooSymbol),
+    yahooSymbol,
+    name: candidate.name,
+    price: 0,
+    change: 0,
+    changePercent: 0,
+    currency: "INR",
+  };
 }
 
 function looksLikeTickerQuery(query: string): boolean {
@@ -230,7 +251,7 @@ export async function GET(request: Request) {
     const normalizedQuery = query.toUpperCase();
     const fallbackSymbols = buildSymbolCandidates(query, exchange);
     const directQuotes = looksLikeTickerQuery(normalizedQuery)
-      ? await fetchQuotes(fallbackSymbols)
+      ? await fetchQuotes(fallbackSymbols).catch(() => [])
       : [];
     const directRanked = directQuotes.map(mapQuoteToSearchResult);
 
@@ -258,7 +279,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const candidates = await searchSymbols(query, SEARCH_SYMBOL_CANDIDATE_LIMIT);
+    const candidates = await searchSymbols(query, SEARCH_SYMBOL_CANDIDATE_LIMIT).catch(() => []);
     const candidateSymbols = candidates.map((candidate) => candidate.symbol);
     const preferredCandidateSymbols = candidates.map((candidate) =>
       mapSymbolToExchange(candidate.symbol, exchange)
@@ -266,7 +287,7 @@ export async function GET(request: Request) {
     const symbolsToFetch = Array.from(
       new Set([...preferredCandidateSymbols, ...candidateSymbols, ...fallbackSymbols])
     ).slice(0, MAX_QUOTE_SYMBOLS);
-    const quotes = await fetchQuotes(symbolsToFetch);
+    const quotes = await fetchQuotes(symbolsToFetch).catch(() => []);
     const quoteMap = new Map(quotes.map((quote) => [quote.symbol, quote]));
 
     let ranked = candidates
@@ -280,6 +301,11 @@ export async function GET(request: Request) {
     if (ranked.length === 0) {
       ranked = quotes.map(mapQuoteToSearchResult);
     }
+
+    if (ranked.length === 0 && candidates.length > 0) {
+      ranked = candidates.map((candidate) => mapCandidateToSearchResult(candidate, exchange));
+    }
+
     const finalResults = finalizeResults(query, exchange, [...directRanked, ...ranked]);
     setCachedResults(query, exchange, finalResults);
 

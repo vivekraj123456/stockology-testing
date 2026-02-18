@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle } from 'lucide-react';
+import { X, CheckCircle, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
 
 const IDLE_REOPEN_MS = 20000;
+const MOBILE_NUMBER_LENGTH = 10;
 
 export default function PopupModal() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+  const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -21,10 +22,9 @@ export default function PopupModal() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [formAlert, setFormAlert] = useState<string | null>(null);
 
   useEffect(() => {
-    setIsMounted(true);
-
     // Restore form data if user started filling previously in this browser.
     try {
       const saved = localStorage.getItem('popup_form');
@@ -34,8 +34,9 @@ export default function PopupModal() {
       }
     } catch {}
 
-    // Always show on first load (including browser refresh).
+    // Show popup immediately on first load (including browser refresh).
     setIsOpen(true);
+    setHasOpenedOnce(true);
 
     return () => {
       if (idleTimerRef.current) {
@@ -45,7 +46,7 @@ export default function PopupModal() {
   }, []);
 
   useEffect(() => {
-    if (!isMounted || isOpen || isSubmitted) {
+    if (!hasOpenedOnce || isOpen || isSubmitted) {
       return;
     }
 
@@ -55,6 +56,7 @@ export default function PopupModal() {
       }
       idleTimerRef.current = setTimeout(() => {
         setIsOpen(true);
+        setHasOpenedOnce(true);
       }, IDLE_REOPEN_MS);
     };
 
@@ -88,11 +90,9 @@ export default function PopupModal() {
         clearTimeout(idleTimerRef.current);
       }
     };
-  }, [isMounted, isOpen, isSubmitted]);
+  }, [hasOpenedOnce, isOpen, isSubmitted]);
 
   useEffect(() => {
-    if (!isMounted) return;
-
     const previousOverflow = document.body.style.overflow;
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -101,16 +101,24 @@ export default function PopupModal() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [isOpen, isMounted]);
+  }, [isOpen]);
 
   const handleClose = () => {
+    setFormAlert(null);
     setIsOpen(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    const normalizedValue =
+      name === 'mobileNo'
+        ? value.replace(/\D/g, '').slice(0, MOBILE_NUMBER_LENGTH)
+        : value;
+    if (formAlert) {
+      setFormAlert(null);
+    }
     setFormData((prev) => {
-      const next = { ...prev, [name]: value };
+      const next = { ...prev, [name]: normalizedValue };
       try {
         localStorage.setItem('popup_form', JSON.stringify(next));
       } catch {}
@@ -121,10 +129,15 @@ export default function PopupModal() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.city || !formData.mobileNo) {
-      alert('Please fill in all fields');
+      setFormAlert('Please fill in all fields');
+      return;
+    }
+    if (!/^\d{10}$/.test(formData.mobileNo)) {
+      setFormAlert('The number should be 10 digits');
       return;
     }
 
+    setFormAlert(null);
     setIsLoading(true);
     try {
       const crmApiEndpoint = process.env.NEXT_PUBLIC_CRM_API_ENDPOINT || '/api/crm/lead';
@@ -157,11 +170,11 @@ export default function PopupModal() {
           setIsOpen(false);
         }, 2000);
       } else {
-        alert('Failed to submit form. Please try again.');
+        setFormAlert('Failed to submit form. Please try again.');
       }
     } catch (error) {
       console.error('Error submitting form:', error);
-      alert('Error submitting form: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      setFormAlert('Unable to submit right now. Please try again in a moment.');
     } finally {
       setIsLoading(false);
     }
@@ -208,10 +221,10 @@ export default function PopupModal() {
               </div>
             )}
 
-            {!showSuccess && (
-              <>
-                {/* Header */}
-                <div className="mb-5 text-center sm:mb-6">
+	            {!showSuccess && (
+	              <>
+	                {/* Header */}
+	                <div className="mb-5 text-center sm:mb-6">
                   <p className="text-sm font-semibold text-gray-700 mb-2">OPEN</p>
                   <h2 className="mb-2 bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-2xl font-bold text-transparent sm:text-3xl">DEMAT ACCOUNT</h2>
                   <p className="text-sm font-semibold text-gray-800">AND START YOUR</p>
@@ -219,11 +232,25 @@ export default function PopupModal() {
                   <p className="text-sm font-semibold text-gray-800 mt-1">JOURNEY WITH US</p>
                 </div>
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
-                  <input
-                    type="text"
-                    name="name"
+	                {/* Form */}
+	                <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
+	                  {formAlert && (
+	                    <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+	                      <AlertCircle size={16} className="mt-0.5 shrink-0" />
+	                      <span className="flex-1 leading-5">{formAlert}</span>
+	                      <button
+	                        type="button"
+	                        onClick={() => setFormAlert(null)}
+	                        className="rounded p-0.5 text-red-500 transition-colors hover:bg-red-100 hover:text-red-700"
+	                        aria-label="Dismiss alert"
+	                      >
+	                        <X size={14} />
+	                      </button>
+	                    </div>
+	                  )}
+	                  <input
+	                    type="text"
+	                    name="name"
                     placeholder="Name"
                     value={formData.name}
                     onChange={handleInputChange}
@@ -237,7 +264,16 @@ export default function PopupModal() {
                       placeholder="Mobile No"
                       value={formData.mobileNo}
                       onChange={handleInputChange}
-                      maxLength={10}
+                      onInvalid={(event) => {
+                        event.currentTarget.setCustomValidity('The number should be 10 digits');
+                      }}
+                      onInput={(event) => {
+                        event.currentTarget.setCustomValidity('');
+                      }}
+                      maxLength={MOBILE_NUMBER_LENGTH}
+                      minLength={MOBILE_NUMBER_LENGTH}
+                      inputMode="numeric"
+                      pattern="[0-9]{10}"
                       className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 shadow-sm transition-all hover:shadow-md focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 sm:py-3"
                     />
                   </div>
@@ -282,7 +318,26 @@ export default function PopupModal() {
 
                 {/* Disclaimer */}
                 <p className="text-xs text-gray-600 mt-4 leading-relaxed">
-                  I hereby give my consent to Stockology Securities Private Limited that data given herewith is to open my Demat and Trading account. I hereby give my consent to Stockology Securities Private Limited to fetch my data from KRA, Digilocker, OTP or Bio Metric based e-KYC.
+                  I hereby give my consent to Stockology Securities Private Limited that data given herewith is to open my Demat and Trading account. I hereby give my consent to Stockology Securities to fetch my data from KRA, Digilocker, OTP or Bio Metric based e-KYC.
+                </p>
+                <p className="mt-3 text-center text-xs">
+                  <a
+                    href="/Terms-&-Conditions"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-red-600 underline hover:text-red-700"
+                  >
+                    Terms & Conditions
+                  </a>
+                  {' | '}
+                  <a
+                    href="/Privacy-Policy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-red-600 underline hover:text-red-700"
+                  >
+                    Privacy Policy
+                  </a>
                 </p>
               </>
             )}

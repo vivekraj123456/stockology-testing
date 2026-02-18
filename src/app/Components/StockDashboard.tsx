@@ -131,6 +131,14 @@ const getStockBaseSymbol = (stock: Pick<Stock, 'symbol' | 'yahooSymbol'>) => {
   return stock.symbol.toUpperCase();
 };
 
+const isNifty50Stock = (stock: Pick<Stock, 'symbol' | 'yahooSymbol' | 'name'>) => {
+  const symbol = getStockFetchSymbol(stock);
+  const baseSymbol = getStockBaseSymbol(stock);
+  const normalizedName = stock.name.trim().toUpperCase();
+
+  return symbol === '^NSEI' || baseSymbol === '^NSEI' || normalizedName.includes('NIFTY 50');
+};
+
 const createSeedStockFromSymbol = (symbolInput: string): Stock => {
   const yahooSymbol = symbolInput.toUpperCase();
   const symbol = yahooSymbol.replace(/\.(NS|BO)$/i, '');
@@ -288,6 +296,390 @@ const withExchangeSymbol = (
   return `${symbol}.${suffix}`;
 };
 
+interface DragRangeSelection {
+  startIndex: number;
+  endIndex: number;
+  startLabel: string;
+  endLabel: string;
+  startPrice: number;
+  endPrice: number;
+  delta: number;
+  deltaPercent: number;
+  startX: number;
+  endX: number;
+  startY: number;
+  endY: number;
+}
+
+interface DragRangePluginOptions {
+  onRangeChange?: (selection: DragRangeSelection | null) => void;
+}
+
+type LineChartOptionsWithDrag = ChartOptions<'line'> & {
+  plugins: NonNullable<ChartOptions<'line'>['plugins']> & {
+    dragRange?: DragRangePluginOptions;
+  };
+};
+
+interface DragRangeState {
+  pointerDown: boolean;
+  startIndex: number | null;
+  currentIndex: number | null;
+  active: boolean;
+  lastEmittedKey: string | null;
+}
+
+type LineChartWithDragRange = ChartJS<'line'> & {
+  $dragRangeState?: DragRangeState;
+};
+
+const clampValue = (value: number, min: number, max: number) => {
+  return Math.min(Math.max(value, min), max);
+};
+
+const drawRoundedRect = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) => {
+  const safeRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + safeRadius, y);
+  ctx.lineTo(x + width - safeRadius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  ctx.lineTo(x + width, y + height - safeRadius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  ctx.lineTo(x + safeRadius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  ctx.lineTo(x, y + safeRadius);
+  ctx.quadraticCurveTo(x, y, x + safeRadius, y);
+  ctx.closePath();
+};
+
+const resolvePointValue = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (value && typeof value === 'object') {
+    const candidate = (value as { y?: number }).y;
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const ensureDragRangeState = (chart: ChartJS<'line'>): DragRangeState => {
+  const chartWithState = chart as LineChartWithDragRange;
+  if (!chartWithState.$dragRangeState) {
+    chartWithState.$dragRangeState = {
+      pointerDown: false,
+      startIndex: null,
+      currentIndex: null,
+      active: false,
+      lastEmittedKey: null,
+    };
+  }
+  return chartWithState.$dragRangeState;
+};
+
+const resolveNearestDataIndex = (chart: ChartJS<'line'>, xPosition: number): number | null => {
+  const dataLength = chart.data.datasets[0]?.data?.length ?? 0;
+  if (dataLength === 0) {
+    return null;
+  }
+
+  const xScale = chart.scales.x;
+  const { left, right } = chart.chartArea;
+  const boundedX = clampValue(xPosition, left, right);
+  const rawValue = xScale.getValueForPixel(boundedX);
+  const numericValue = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  return clampValue(Math.round(numericValue), 0, dataLength - 1);
+};
+
+const buildDragRangeSelection = (
+  chart: ChartJS<'line'>,
+  startIndex: number,
+  endIndex: number
+): DragRangeSelection | null => {
+  const datasetValues = chart.data.datasets[0]?.data ?? [];
+  const labels = chart.data.labels ?? [];
+  const dataLength = datasetValues.length;
+  if (dataLength === 0) {
+    return null;
+  }
+
+  const safeStartIndex = clampValue(startIndex, 0, dataLength - 1);
+  const safeEndIndex = clampValue(endIndex, 0, dataLength - 1);
+  const startPrice = resolvePointValue(datasetValues[safeStartIndex]);
+  const endPrice = resolvePointValue(datasetValues[safeEndIndex]);
+  if (startPrice === null || endPrice === null) {
+    return null;
+  }
+
+  const xScale = chart.scales.x;
+  const yScale = chart.scales.y;
+  const startX = xScale.getPixelForValue(safeStartIndex);
+  const endX = xScale.getPixelForValue(safeEndIndex);
+  const startY = yScale.getPixelForValue(startPrice);
+  const endY = yScale.getPixelForValue(endPrice);
+  const delta = endPrice - startPrice;
+  const deltaPercent = startPrice !== 0 ? (delta / startPrice) * 100 : 0;
+
+  return {
+    startIndex: safeStartIndex,
+    endIndex: safeEndIndex,
+    startLabel: String(labels[safeStartIndex] ?? ''),
+    endLabel: String(labels[safeEndIndex] ?? ''),
+    startPrice,
+    endPrice,
+    delta,
+    deltaPercent,
+    startX,
+    endX,
+    startY,
+    endY,
+  };
+};
+
+const emitDragRangeSelection = (
+  chart: ChartJS<'line'>,
+  state: DragRangeState,
+  options?: DragRangePluginOptions
+) => {
+  if (!options?.onRangeChange) {
+    return;
+  }
+  if (state.startIndex === null || state.currentIndex === null || !state.active) {
+    if (state.lastEmittedKey !== null) {
+      state.lastEmittedKey = null;
+      options.onRangeChange(null);
+    }
+    return;
+  }
+
+  const selection = buildDragRangeSelection(chart, state.startIndex, state.currentIndex);
+  if (!selection || selection.startIndex === selection.endIndex) {
+    if (state.lastEmittedKey !== null) {
+      state.lastEmittedKey = null;
+      options.onRangeChange(null);
+    }
+    return;
+  }
+
+  const emissionKey = `${selection.startIndex}:${selection.endIndex}:${selection.startPrice}:${selection.endPrice}`;
+  if (state.lastEmittedKey !== emissionKey) {
+    state.lastEmittedKey = emissionKey;
+    options.onRangeChange(selection);
+  }
+};
+
+const resetDragRangeState = (
+  chart: ChartJS<'line'>,
+  options?: DragRangePluginOptions
+) => {
+  const state = ensureDragRangeState(chart);
+  const hadSelection = state.active || state.startIndex !== null || state.currentIndex !== null;
+  state.pointerDown = false;
+  state.startIndex = null;
+  state.currentIndex = null;
+  state.active = false;
+  state.lastEmittedKey = null;
+
+  if (hadSelection && options?.onRangeChange) {
+    options.onRangeChange(null);
+  }
+};
+
+const drawSelectionHandle = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  color: string
+) => {
+  ctx.beginPath();
+  ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+};
+
+const dragRangePlugin: Plugin<'line'> = {
+  id: 'dragRange',
+  beforeEvent: (chart, args, pluginOptions) => {
+    const options = pluginOptions as DragRangePluginOptions | undefined;
+    const state = ensureDragRangeState(chart);
+    const dataLength = chart.data.datasets[0]?.data?.length ?? 0;
+
+    if (dataLength === 0) {
+      resetDragRangeState(chart, options);
+      return;
+    }
+
+    const event = args.event;
+    const eventType = String(event.type);
+    const nativeEvent = event.native;
+    const pointerX = typeof event.x === 'number' ? event.x : null;
+    const pointerY = typeof event.y === 'number' ? event.y : null;
+    const { left, right, top, bottom } = chart.chartArea;
+    const isInsideChart =
+      pointerX !== null &&
+      pointerY !== null &&
+      pointerX >= left &&
+      pointerX <= right &&
+      pointerY >= top &&
+      pointerY <= bottom;
+
+    const markChanged = () => {
+      (args as { changed?: boolean }).changed = true;
+    };
+
+    if (eventType === 'mousedown' || eventType === 'touchstart') {
+      if (eventType === 'mousedown' && nativeEvent instanceof MouseEvent && nativeEvent.button !== 0) {
+        return;
+      }
+      if (!isInsideChart || pointerX === null) {
+        return;
+      }
+      const nearestIndex = resolveNearestDataIndex(chart, pointerX);
+      if (nearestIndex === null) {
+        return;
+      }
+
+      state.pointerDown = true;
+      state.startIndex = nearestIndex;
+      state.currentIndex = nearestIndex;
+      state.active = true;
+      state.lastEmittedKey = null;
+      emitDragRangeSelection(chart, state, options);
+      markChanged();
+      return;
+    }
+
+    if ((eventType === 'mousemove' || eventType === 'touchmove') && state.pointerDown) {
+      if (eventType === 'mousemove' && nativeEvent instanceof MouseEvent && (nativeEvent.buttons & 1) !== 1) {
+        resetDragRangeState(chart, options);
+        markChanged();
+        return;
+      }
+      if (pointerX === null) {
+        return;
+      }
+      const nearestIndex = resolveNearestDataIndex(chart, pointerX);
+      if (nearestIndex === null) {
+        return;
+      }
+
+      state.currentIndex = nearestIndex;
+      state.active = state.startIndex !== null;
+      emitDragRangeSelection(chart, state, options);
+      markChanged();
+      return;
+    }
+
+    if (
+      eventType === 'mouseup' ||
+      eventType === 'touchend' ||
+      eventType === 'touchcancel' ||
+      eventType === 'mouseout'
+    ) {
+      if (!state.pointerDown) {
+        return;
+      }
+
+      state.pointerDown = false;
+      resetDragRangeState(chart, options);
+      markChanged();
+    }
+  },
+  afterDatasetsDraw: (chart) => {
+    const state = ensureDragRangeState(chart);
+    if (!state.pointerDown || !state.active || state.startIndex === null || state.currentIndex === null) {
+      return;
+    }
+
+    const selection = buildDragRangeSelection(chart, state.startIndex, state.currentIndex);
+    if (!selection || selection.startIndex === selection.endIndex) {
+      return;
+    }
+
+    const { ctx, chartArea } = chart;
+    const leftX = Math.min(selection.startX, selection.endX);
+    const rightX = Math.max(selection.startX, selection.endX);
+    const selectionColor = selection.delta >= 0 ? '#059669' : '#dc2626';
+    const areaFill = selection.delta >= 0 ? 'rgba(5, 150, 105, 0.14)' : 'rgba(220, 38, 38, 0.14)';
+    const guideLine = selection.delta >= 0 ? 'rgba(5, 150, 105, 0.45)' : 'rgba(220, 38, 38, 0.45)';
+    const deltaPrefix = selection.delta >= 0 ? '+' : '';
+    const percentPrefix = selection.deltaPercent >= 0 ? '+' : '';
+    const primaryText = `${deltaPrefix}${selection.delta.toFixed(2)} (${percentPrefix}${selection.deltaPercent.toFixed(2)}%)`;
+    const secondaryText = `${selection.startLabel} - ${selection.endLabel}`;
+
+    ctx.save();
+
+    ctx.fillStyle = areaFill;
+    ctx.fillRect(leftX, chartArea.top, rightX - leftX, chartArea.bottom - chartArea.top);
+
+    ctx.beginPath();
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = guideLine;
+    ctx.moveTo(selection.startX, chartArea.top);
+    ctx.lineTo(selection.startX, chartArea.bottom);
+    ctx.moveTo(selection.endX, chartArea.top);
+    ctx.lineTo(selection.endX, chartArea.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    drawSelectionHandle(ctx, selection.startX, selection.startY, selectionColor);
+    drawSelectionHandle(ctx, selection.endX, selection.endY, selectionColor);
+
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.font = '700 14px "Segoe UI", sans-serif';
+    const primaryWidth = ctx.measureText(primaryText).width;
+    ctx.font = '500 12px "Segoe UI", sans-serif';
+    const secondaryWidth = ctx.measureText(secondaryText).width;
+    const labelWidth = Math.max(primaryWidth, secondaryWidth) + 26;
+    const labelHeight = 56;
+    const rawLabelX = (selection.startX + selection.endX) / 2 - labelWidth / 2;
+    const labelX = clampValue(rawLabelX, chartArea.left + 8, chartArea.right - labelWidth - 8);
+    const hasLiveTooltip = (chart.tooltip?.getActiveElements()?.length ?? 0) > 0;
+    const labelY = hasLiveTooltip ? chartArea.bottom - labelHeight - 8 : chartArea.top + 8;
+
+    drawRoundedRect(ctx, labelX, labelY, labelWidth, labelHeight, 8);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.font = '700 14px "Segoe UI", sans-serif';
+    ctx.fillStyle = selectionColor;
+    ctx.fillText(primaryText, labelX + 13, labelY + 20);
+
+    ctx.font = '500 12px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#475569';
+    ctx.fillText(secondaryText, labelX + 13, labelY + 40);
+
+    ctx.restore();
+  },
+};
+
 const hoverGuidePlugin: Plugin<'line'> = {
   id: 'hover-guide',
   afterDatasetsDraw: (chart) => {
@@ -388,11 +780,13 @@ function ExchangeSwitch({
 
 export default function StockDashboard() {
   const searchParams = useSearchParams();
+  const chartRef = useRef<ChartJS<'line'> | null>(null);
   const [indices, setIndices] = useState<Stock[]>([]);
   const [gainers, setGainers] = useState<Stock[]>([]);
   const [losers, setLosers] = useState<Stock[]>([]);
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [dragRangeSelection, setDragRangeSelection] = useState<DragRangeSelection | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState('1d');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Stock[]>([]);
@@ -410,6 +804,8 @@ export default function StockDashboard() {
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
   const selectionRequestRef = useRef(0);
   const navbarSelectionRef = useRef<string | null>(null);
+  const ignoreInitialNavbarQueryOnReloadRef = useRef(false);
+  const hasProcessedInitialNavbarQueryRef = useRef(false);
   const searchCacheRef = useRef<Map<string, { results: Stock[]; timestamp: number }>>(new Map());
   const quickSearchPoolRef = useRef<Stock[]>([]);
 
@@ -442,6 +838,12 @@ export default function StockDashboard() {
     const nextGainers = snapshot.gainers ?? [];
     const nextLosers = snapshot.losers ?? [];
     const nextMarketStocks = [...nextIndices, ...nextGainers, ...nextLosers];
+    const defaultReloadStock =
+      nextIndices.find((stock) => isNifty50Stock(stock)) ??
+      nextMarketStocks.find((stock) => isNifty50Stock(stock)) ??
+      nextIndices[0] ??
+      nextMarketStocks[0] ??
+      null;
 
     setMarketStatsByExchange(nextMarketStats);
     setActiveMarketStatsExchange((previous) => {
@@ -468,7 +870,7 @@ export default function StockDashboard() {
 
     setSelectedStock((previous) => {
       if (!previous) {
-        return nextIndices[0] ?? nextMarketStocks[0] ?? null;
+        return defaultReloadStock;
       }
 
       const previousKey = getStockKey(previous);
@@ -552,6 +954,13 @@ export default function StockDashboard() {
     } catch (error) {
       console.error('Error loading stock by exchange:', error);
     }
+  }, []);
+
+  useEffect(() => {
+    const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    const legacyNavigationType = (performance as Performance & { navigation?: { type?: number } }).navigation?.type;
+    ignoreInitialNavbarQueryOnReloadRef.current =
+      navigationEntry?.type === 'reload' || legacyNavigationType === 1;
   }, []);
 
   useEffect(() => {
@@ -656,6 +1065,20 @@ export default function StockDashboard() {
     fetchChartData();
   }, [selectedStockKey, selectedPeriod]);
 
+  const clearDragSelection = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart) {
+      setDragRangeSelection(null);
+      return;
+    }
+    resetDragRangeState(chart, { onRangeChange: setDragRangeSelection });
+    chart.draw();
+  }, []);
+
+  useEffect(() => {
+    clearDragSelection();
+  }, [selectedStockKey, selectedPeriod, clearDragSelection]);
+
   useEffect(() => {
     quickSearchPoolRef.current = mergeUniqueStocksByCompany([
       ...indices,
@@ -671,10 +1094,19 @@ export default function StockDashboard() {
 
   useEffect(() => {
     if (!navbarStockSymbol) {
+      hasProcessedInitialNavbarQueryRef.current = true;
       return;
     }
 
     const requestKey = `${navbarExchange}:${navbarStockSymbol}`;
+    if (!hasProcessedInitialNavbarQueryRef.current) {
+      hasProcessedInitialNavbarQueryRef.current = true;
+      if (ignoreInitialNavbarQueryOnReloadRef.current) {
+        navbarSelectionRef.current = requestKey;
+        return;
+      }
+    }
+
     if (navbarSelectionRef.current === requestKey) {
       return;
     }
@@ -917,9 +1349,10 @@ export default function StockDashboard() {
       unchanged: 0,
     };
 
-  const chartOptions: ChartOptions<'line'> = {
+  const chartOptions: LineChartOptionsWithDrag = {
     responsive: true,
     maintainAspectRatio: true,
+    events: ['mousemove', 'mouseout', 'click', 'mousedown', 'mouseup', 'touchstart', 'touchmove', 'touchend', 'touchcancel'],
     interaction: {
       mode: 'index',
       intersect: false,
@@ -933,22 +1366,25 @@ export default function StockDashboard() {
         intersect: false,
         backgroundColor: '#ffffff',
         borderColor: '#97b83f',
-        borderWidth: 2,
+        borderWidth: 1,
         displayColors: false,
         titleColor: '#111827',
         bodyColor: '#111827',
-        padding: 10,
+        padding: 6,
         cornerRadius: 0,
-        caretSize: 8,
+        caretSize: 6,
         caretPadding: 2,
         titleFont: { size: 0 },
-        bodyFont: { size: 22, weight: 500 },
+        bodyFont: { size: 16, weight: 500 },
         callbacks: {
           title: () => '',
           label: (context: TooltipItem<'line'>) => {
             return formatTooltipValue(context.parsed.y);
           },
         },
+      },
+      dragRange: {
+        onRangeChange: setDragRangeSelection,
       },
     },
     scales: {
@@ -1117,9 +1553,40 @@ export default function StockDashboard() {
               ))}
             </div>
 
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-gray-500">Drag on the chart to compare any two points in real time.</p>
+              {dragRangeSelection && (
+                <button
+                  type="button"
+                  onClick={clearDragSelection}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                >
+                  Clear selection
+                </button>
+              )}
+            </div>
+
+            {dragRangeSelection && (
+              <p
+                className={`mb-4 text-sm font-semibold ${
+                  dragRangeSelection.delta >= 0 ? 'text-emerald-700' : 'text-red-700'
+                }`}
+              >
+                Move: {dragRangeSelection.delta >= 0 ? '+' : ''}
+                {dragRangeSelection.delta.toFixed(2)} ({dragRangeSelection.deltaPercent >= 0 ? '+' : ''}
+                {dragRangeSelection.deltaPercent.toFixed(2)}%) from {dragRangeSelection.startLabel} to{' '}
+                {dragRangeSelection.endLabel}
+              </p>
+            )}
+
             <div className="relative h-80">
               {preparedChartData ? (
-                <Line data={preparedChartData} options={chartOptions} plugins={[hoverGuidePlugin]} />
+                <Line
+                  ref={chartRef}
+                  data={preparedChartData}
+                  options={chartOptions}
+                  plugins={[hoverGuidePlugin, dragRangePlugin]}
+                />
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500">
                   Loading chart data...
