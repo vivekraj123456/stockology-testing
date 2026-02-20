@@ -1,8 +1,7 @@
 "use client";
 import React, { useState } from 'react';
-import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Copy, Check, ArrowRight, Banknote, Clock, Shield } from 'lucide-react';
+import { X, Copy, Check, ArrowRight, Banknote, Clock } from 'lucide-react';
 
 export default function FundTransfer() {
   const [clientCode, setClientCode] = useState('');
@@ -237,6 +236,74 @@ export default function FundTransfer() {
           </div>
         </div>
 
+        <section className="mt-8 overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(135deg,#12181a,#1b2326)] text-white shadow-[0_30px_80px_-40px_rgba(0,0,0,0.9)]">
+          <div className="grid grid-cols-1 gap-8 p-6 lg:grid-cols-[1.2fr_0.8fr] lg:p-10">
+            <div>
+              <h2 className="max-w-xl text-3xl font-bold leading-tight sm:text-4xl">
+                Open a <span className="text-yellow-400">Free</span> Demat Account in{" "}
+                <span className="text-yellow-400">5 Mins.</span>
+              </h2>
+
+              <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                {[
+                  "Free AMC for First Year",
+                  "Free Research",
+                  "Low DP Charges (₹10)",
+                  "No Auto Square Off Charges",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-3">
+                    <div className="mt-1 h-8 w-8 rounded-full border border-emerald-300/80 bg-emerald-400/10" />
+                    <p className="text-lg font-semibold text-white/95">{item}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <form
+              onSubmit={(event) => event.preventDefault()}
+              className="rounded-2xl bg-black/20 p-4 backdrop-blur-sm sm:p-5"
+            >
+              <label htmlFor="fund-transfer-lead-mobile" className="sr-only">
+                Mobile Number
+              </label>
+              <input
+                id="fund-transfer-lead-mobile"
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]{10}"
+                maxLength={10}
+                placeholder="Mobile Number"
+                className="w-full rounded-xl border border-white/30 bg-white/90 px-5 py-3 text-lg font-medium text-gray-900 placeholder:text-gray-500 outline-none focus:border-yellow-300 focus:ring-2 focus:ring-yellow-300/40"
+              />
+
+              <label className="mt-4 flex items-start gap-2 text-sm text-white/90">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-white/40 bg-white/90 text-emerald-600 focus:ring-emerald-400"
+                />
+                <span>
+                  I agree &amp; accept{" "}
+                  <a
+                    href="/Terms-&-Conditions"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-yellow-400 hover:text-yellow-300"
+                  >
+                    T&amp;C
+                  </a>
+                </span>
+              </label>
+
+              <button
+                type="submit"
+                className="mt-5 w-full rounded-xl bg-yellow-400 px-4 py-3 text-lg font-semibold text-gray-900 transition-colors hover:bg-yellow-300"
+              >
+                Submit
+              </button>
+            </form>
+          </div>
+        </section>
+
 
       </div>
 
@@ -247,7 +314,7 @@ export default function FundTransfer() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 z-[2000] bg-black/60 backdrop-blur-sm flex items-start justify-center p-4 pt-24 md:items-center md:pt-4"
             onClick={() => setShowModal(false)}
           >
             <motion.div
@@ -255,7 +322,7 @@ export default function FundTransfer() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: "spring", duration: 0.5 }}
-              className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+              className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[calc(100vh-7rem)] md:max-h-[80vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}

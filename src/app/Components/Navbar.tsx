@@ -209,12 +209,15 @@ const Navbar = () => {
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className={`pointer-events-auto relative flex items-center justify-between w-full max-w-7xl px-3 sm:px-5 lg:px-6 transition-all duration-300 rounded-2xl border overflow-visible ${isScrolled
-          ? "h-16 bg-white/90 backdrop-blur-xl shadow-2xl shadow-black/10 border-white/30"
-          : "h-20 bg-white/95 shadow-xl shadow-black/8 border-gray-200"
+        className={`pointer-events-auto relative isolate flex items-center justify-between w-full max-w-7xl px-3 sm:px-5 lg:px-6 transition-all duration-300 rounded-2xl border overflow-visible ring-1 ring-black/5 ${isScrolled
+          ? "h-16 bg-white/96 backdrop-blur-xl shadow-[0_22px_48px_-26px_rgba(15,23,42,0.55)] border-slate-200/80"
+          : "h-20 bg-white/98 backdrop-blur-md shadow-[0_20px_44px_-26px_rgba(15,23,42,0.45)] border-slate-300/80"
           }`}
       >
-        <div className="flex items-center gap-2 md:gap-4">
+        <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-r from-white/90 via-white/95 to-slate-50/90" />
+        <div className="pointer-events-none absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-emerald-300/80 to-transparent" />
+
+        <div className="relative z-10 flex items-center gap-2 md:gap-4">
           {/* Mobile Menu Toggle */}
           <div className="md:hidden flex items-center">
             <button
@@ -238,7 +241,7 @@ const Navbar = () => {
           </Link>
         </div>
 
-        <div className="hidden md:flex flex-1 min-w-0 items-center justify-between pl-4 lg:pl-6">
+        <div className="relative z-10 hidden md:flex flex-1 min-w-0 items-center justify-between pl-4 lg:pl-6">
           {/* Desktop Navigation */}
           <nav className="flex items-center gap-0.5 xl:gap-1">
           {navData.map((item) => (
@@ -254,7 +257,7 @@ const Navbar = () => {
                     ? toggleDropdown(item.id)
                     : (setShowMobileMenu(false), handleClick(item.href))
                 }
-                className="group relative whitespace-nowrap px-3.5 py-2.5 text-sm font-semibold text-gray-700 hover:text-green-600 transition-colors flex items-center gap-1 rounded-lg hover:bg-green-50"
+                className="group relative whitespace-nowrap px-3.5 py-2.5 text-sm font-semibold text-slate-800 hover:text-emerald-700 transition-colors flex items-center gap-1 rounded-lg hover:bg-emerald-50/85"
               >
                 {item.label}
                 {item.type === "dropdown" && (
@@ -281,7 +284,7 @@ const Navbar = () => {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute top-full left-0 mt-2 bg-white/95 backdrop-blur-md shadow-2xl rounded-2xl border border-gray-100 py-2 w-48 overflow-hidden z-[1100]"
+                    className="absolute top-full left-0 mt-2 bg-white/97 backdrop-blur-md shadow-2xl rounded-2xl border border-slate-200/80 py-2 w-48 overflow-hidden z-[1100] ring-1 ring-black/5"
                   >
                     {item.subItems?.map((subItem) => (
                       <li key={subItem.id}>
@@ -321,7 +324,7 @@ const Navbar = () => {
                   }}
                   onFocus={() => setStockSearchOpen(true)}
                   placeholder="search by name"
-                  className="w-full border border-gray-300 rounded-lg pl-10 pr-10 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none bg-white"
+                  className="w-full border border-slate-300 rounded-lg pl-10 pr-10 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none bg-white/95"
                 />
                 {stockSearching && (
                   <Loader2 className="w-4 h-4 animate-spin text-blue-600 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -329,7 +332,7 @@ const Navbar = () => {
               </div>
 
               {stockSearchOpen && (stockSearchQuery.trim().length >= 2 || stockSearchError) && (
-                <div className="absolute z-[1200] mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                <div className="absolute z-[1200] mt-2 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden ring-1 ring-black/5">
                   {stockSearching && (
                     <p className="px-4 py-3 text-sm text-gray-600">Searching market data...</p>
                   )}
