@@ -284,17 +284,17 @@ const Navbar = () => {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute top-full left-0 mt-2 bg-white/97 backdrop-blur-md shadow-2xl rounded-2xl border border-slate-200/80 py-2 w-48 overflow-hidden z-[1100] ring-1 ring-black/5"
+                    className="absolute left-0 top-[calc(100%+0.55rem)] z-[1200] min-w-[13rem] overflow-hidden rounded-xl border border-slate-300 bg-white py-1.5 shadow-[0_24px_46px_-20px_rgba(15,23,42,0.55)] ring-1 ring-slate-200"
                   >
                     {item.subItems?.map((subItem) => (
-                      <li key={subItem.id}>
+                      <li key={subItem.id} className="border-b border-slate-100 last:border-b-0">
                         <Link
                           href={subItem.href}
                           onClick={() => {
                             setShowDropdown(null);
                             setShowMobileMenu(false);
                           }}
-                          className="flex px-4 py-2.5 text-sm text-gray-600 hover:bg-green-50 hover:text-green-700 transition-colors"
+                          className="flex px-4 py-2.5 text-sm font-semibold text-slate-800 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
                         >
                           {subItem.label}
                         </Link>
